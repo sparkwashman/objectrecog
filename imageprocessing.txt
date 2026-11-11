@@ -1,0 +1,159 @@
+# CELL 1: imports and helper functions
+import cv2
+import numpy as np
+from google.colab.patches import cv2_imshow
+from google.colab import files
+import os
+
+def make_color_mask(hsv_image, color_name):
+    """Make a white-on-black mask for one color in an HSV image."""
+    # Adjust thresholds to be slightly wider to capture the colors in real images
+    if color_name == "red":
+        lower_red_1 = np.array([0, 50, 50])
+        upper_red_1 = np.array([15, 255, 255])
+        lower_red_2 = np.array([165, 50, 50])
+        upper_red_2 = np.array([180, 255, 255])
+        mask_1 = cv2.inRange(hsv_image, lower_red_1, upper_red_1)
+        mask_2 = cv2.inRange(hsv_image, lower_red_2, upper_red_2)
+        return cv2.bitwise_or(mask_1, mask_2)
+
+    color_ranges = {
+        "green": (np.array([35, 40, 40]), np.array([85, 255, 255])),
+        "blue": (np.array([90, 40, 40]), np.array([135, 255, 255])),
+    }
+    lower, upper = color_ranges[color_name]
+    return cv2.inRange(hsv_image, lower, upper)
+
+def classify_shape(contour):
+    """Estimate a shape using its corners and circularity."""
+    perimeter = cv2.arcLength(contour, True)
+    if perimeter == 0:
+        return "unknown"
+    corners = cv2.approxPolyDP(contour, 0.04 * perimeter, True)
+    corner_count = len(corners)
+    if corner_count == 3:
+        return "triangle"
+    if corner_count == 4:
+        _, _, width, height = cv2.boundingRect(corners)
+        aspect_ratio = width / float(height)
+        if 0.85 <= aspect_ratio <= 1.15:
+            return "square"
+        return "rectangle"
+    area = cv2.contourArea(contour)
+    circularity = 4 * np.pi * area / (perimeter * perimeter)
+    if circularity > 0.75:
+        return "circle"
+    return "complex_shape"
+
+def automatic_canny_thresholds(gray_image):
+    """Choose Canny thresholds from the median image brightness."""
+    nonzero_pixels = gray_image[gray_image > 0]
+    if nonzero_pixels.size == 0:
+        return 50, 150
+    median = float(np.median(nonzero_pixels))
+    lower = int(max(0, 0.66 * median))
+    upper = int(min(255, 1.33 * median))
+    return lower, upper
+
+def save_image(filename, image):
+    """Save an image and report a useful error if OpenCV cannot write it."""
+    if not cv2.imwrite(filename, image):
+        raise OSError(f"Could not save {filename}.")
+
+# CELL 2: Load the image
+IMAGE_PATH = "shapes.jpg"
+if os.path.exists(IMAGE_PATH):
+    print("Reusing existing", IMAGE_PATH)
+else:
+    print("Generating fallback test image...")
+    canvas = np.full((480, 640, 3), 255, np.uint8)
+    cv2.circle(canvas, (120, 120), 60, (0, 0, 255), -1)
+    cv2.rectangle(canvas, (260, 60), (380, 180), (0, 180, 0), -1)
+    cv2.imwrite(IMAGE_PATH, canvas)
+
+image = cv2.imread(IMAGE_PATH)
+if image is None:
+    raise FileNotFoundError(f"Could not open {IMAGE_PATH}.")
+
+print("Loaded:", IMAGE_PATH, "| shape:", image.shape)
+print("Original Image:")
+cv2_imshow(image)
+
+# CELL 3: Image Enhancement & Processing Stages
+
+# 1. Denoise
+denoised = cv2.bilateralFilter(image, 9, 75, 75)
+
+# 2. Smoothing
+gray = cv2.cvtColor(denoised, cv2.COLOR_BGR2GRAY)
+smoothed_gray = cv2.GaussianBlur(gray, (5, 5), 0)
+
+# 3. Sharpening (unsharp masking)
+soft_image = cv2.GaussianBlur(denoised, (0, 0), 3)
+sharpened = cv2.addWeighted(denoised, 1.5, soft_image, -0.5, 0)
+
+# 4. Edge Detection
+lower, upper = automatic_canny_thresholds(smoothed_gray)
+edges = cv2.Canny(smoothed_gray, lower, upper)
+kernel = np.ones((3, 3), np.uint8)
+edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+
+# 5. Contour Detection and Color Identification
+result = image.copy()
+detected_count = 0
+labels = []
+hsv_image = cv2.cvtColor(denoised, cv2.COLOR_BGR2HSV)
+
+# Let's search for red, green, blue color profiles, and also general foreground elements if colored ones are sparse
+colors_to_check = ["red", "green", "blue"]
+for color_name in colors_to_check:
+    mask = make_color_mask(hsv_image, color_name)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        if cv2.contourArea(contour) < 150:  # Lower threshold for smaller images
+            continue
+        
+        detected_count += 1
+        shape_name = classify_shape(contour)
+        x, y, width, height = cv2.boundingRect(contour)
+        label = f"{color_name} {shape_name}"
+        labels.append(label)
+        
+        cv2.drawContours(result, [contour], -1, (0, 255, 0), 2)
+        cv2.putText(result, label, (x, max(y - 10, 15)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+
+# Fallback: if no colored objects found, find any non-black/non-white distinct object
+if detected_count == 0:
+    _, threshold_mask = cv2.threshold(smoothed_gray, 10, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(threshold_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        if cv2.contourArea(contour) < 100:
+            continue
+        detected_count += 1
+        shape_name = classify_shape(contour)
+        x, y, width, height = cv2.boundingRect(contour)
+        label = f"object: {shape_name}"
+        labels.append(label)
+        cv2.drawContours(result, [contour], -1, (0, 0, 255), 2)
+        cv2.putText(result, label, (x, max(y - 5, 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+
+save_image("shapes_enhanced.jpg", sharpened)
+save_image("shapes_edges.jpg", edges)
+save_image("recognized_shapes.jpg", result)
+
+print(f"Canny thresholds: lower={lower}, upper={upper}")
+print(f"Objects detected: {detected_count}")
+print("Labels:", labels)
+
+# CELL 4: Visualizing Results
+print("\n--- 1) Enhanced & Sharpened Image ---")
+cv2_imshow(sharpened)
+
+print("\n--- 2) Canny Edges (Automatic Thresholds) ---")
+cv2_imshow(edges)
+
+print("\n--- 3) Recognized Contours & Shapes ---")
+cv2_imshow(result)
