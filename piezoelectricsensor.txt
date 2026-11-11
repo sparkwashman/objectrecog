@@ -1,0 +1,32 @@
+// --- Pin Definitions ---
+const int PIEZO_PIN = A0; // Piezo P+ connected to A0
+
+// Variables to track readings
+int rawValue = 0;
+float voltage = 0.0;
+
+void setup() {
+  // Initialize serial communication
+  // Use 9600 to match the Proteus Virtual Terminal default
+  Serial.begin(9600); 
+  
+  // Note: We do not need pinMode() for analogRead, 
+  // but it is good practice to note A0 is an input.
+}
+
+void loop() {
+  // 1. Read the raw ADC value (0 to 1023)
+  rawValue = analogRead(PIEZO_PIN);
+  
+  // 2. Convert the raw value to Voltage (assuming 5V reference)
+  // Formula: (ADC Value / 1023.0) * 5.0 Volts
+  voltage = (rawValue / 1023.0) * 5.0;
+  
+  // 3. Print the voltage to the Serial Monitor/Plotter
+  // We only print the voltage so the Serial Plotter graphs a clean line
+  Serial.println(voltage);
+  
+  // 4. Short delay to stabilize the ADC and make the plot readable
+  // For high-frequency vibrations, reduce this delay to 1 or 2 ms.
+  delay(10); 
+}
