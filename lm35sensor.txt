@@ -1,0 +1,40 @@
+// --- Pin Definitions ---
+const int LM35_PIN = A0; // Connect the OUT/Vout pin of LM35 to Analog Pin 0
+
+// --- Calibration Variables ---
+// The Arduino Uno's 5V pin isn't always exactly 5.00V. 
+// For precise static characteristics, measure your 5V pin with a multimeter 
+// and update this value (e.g., 4.98)
+const float REFERENCE_VOLTAGE = 5.0; 
+
+void setup() {
+  // 9600 baud rate for serial communication
+  Serial.begin(9600);
+  
+  // Print a CSV header for easy data logging
+  Serial.println("Time(ms),Temperature(C)");
+}
+
+void loop() {
+  // 1. READ ANALOG VALUE
+  // The ADC reads a value from 0 to 1023
+  int analogValue = analogRead(LM35_PIN);
+  
+  // 2. CONVERT TO VOLTAGE
+  float voltage = (analogValue / 1024.0) * REFERENCE_VOLTAGE;
+  
+  // 3. CONVERT VOLTAGE TO TEMPERATURE
+  // The LM35 has a linear scale factor of +10.0 mV/°C (or 0.01 V/°C)
+  float temperatureC = voltage / 0.01; 
+  
+  // 4. PRINT DATA (Time, Temp) FOR DYNAMIC ANALYSIS
+  // millis() gives the exact time timestamp needed to calculate the time constant
+  Serial.print(millis()); 
+  Serial.print(",");
+  Serial.println(temperatureC);
+  
+  // 100ms delay provides 10 samples per second. 
+  // This high sampling rate is ideal for capturing the dynamic response curve 
+  // when you plunge the sensor into hot/cold water.
+  delay(100); 
+}
