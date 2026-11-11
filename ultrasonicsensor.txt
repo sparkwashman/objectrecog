@@ -1,0 +1,37 @@
+// Define the pins based on the Tinkercad circuit
+const int trigPin = 6;
+const int echoPin = 7;
+
+void setup() {
+  // Initialize serial communication to match the Serial Monitor
+  Serial.begin(9600);
+  
+  // Set pin modes
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+}
+
+void loop() {
+  // 1. Clear the trigger pin
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  
+  // 2. Send a 10-microsecond HIGH pulse to trigger the sensor
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  
+  // 3. Measure the Time of Flight (ToF)
+  // pulseIn returns the time in microseconds for the sound to travel out and back
+  long timeOfFlight = pulseIn(echoPin, HIGH);
+  
+  // 4. Calculate Distance in cm
+  // Speed of sound is ~0.0343 cm/µs. We divide by 2 for the round trip.
+  float distanceCm = (timeOfFlight * 0.0343) / 2.0;
+  
+  // 5. Print the result to the Serial Monitor
+  Serial.println(distanceCm);
+  
+  // Short delay before the next reading
+  delay(100);
+}
