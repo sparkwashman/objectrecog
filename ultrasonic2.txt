@@ -1,0 +1,91 @@
+// --- Sensor Pin Definitions ---
+const int TRIG_PIN = 2; // Grey wire
+const int ECHO_PIN = 3; // Yellow wire
+
+// --- LED Pin Definitions ---
+const int LED_RED = 8;    // Red wire to Red LED
+const int LED_ORANGE = 9; // Orange wire to Orange LED
+const int LED_BLUE = 10;  // Blue wire to Blue LED
+const int LED_GREEN = 11; // Green wire to Green LED
+
+// --- Water Level Thresholds (in centimeters) ---
+// Adjust these values based on the depth of your actual tank!
+const int TANK_EMPTY_CM = 80; // Distance when tank is almost empty
+const int LEVEL_LOW_CM = 60;  // Distance for Low level
+const int LEVEL_MED_CM = 40;  // Distance for Medium level
+const int LEVEL_HIGH_CM = 20; // Distance for Full level
+
+void setup() {
+  Serial.begin(9600);
+  
+  // Set sensor pins
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  
+  // Set LED pins as outputs
+  pinMode(LED_RED, OUTPUT);
+  pinMode(LED_ORANGE, OUTPUT);
+  pinMode(LED_BLUE, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
+  
+  Serial.println("Water Level Monitor Started");
+}
+
+void loop() {
+  // 1. Trigger the Ultrasonic Sensor
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  
+  // 2. Measure Time of Flight
+  long duration = pulseIn(ECHO_PIN, HIGH);
+  
+  // 3. Calculate Distance in cm (Speed of sound = 0.0343 cm/us)
+  float distance = (duration * 0.0343) / 2.0;
+  
+  Serial.print("Distance to water: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+
+  // 4. Update LEDs based on water level (distance)
+  // Remember: Smaller distance means HIGHER water level
+  
+  // Turn all off initially
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_ORANGE, LOW);
+  digitalWrite(LED_BLUE, LOW);
+  digitalWrite(LED_GREEN, LOW);
+
+  if (distance > TANK_EMPTY_CM) {
+    // Tank is empty or sensor is out of range. 
+    // Blink Red LED as a warning.
+    digitalWrite(LED_RED, millis() % 1000 < 500 ? HIGH : LOW);
+  } 
+  else if (distance > LEVEL_LOW_CM) {
+    // Very low water: Only Red is ON
+    digitalWrite(LED_RED, HIGH);
+  } 
+  else if (distance > LEVEL_MED_CM) {
+    // Low water: Red + Orange ON
+    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_ORANGE, HIGH);
+  } 
+  else if (distance > LEVEL_HIGH_CM) {
+    // Medium water: Red + Orange + Blue ON
+    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_ORANGE, HIGH);
+    digitalWrite(LED_BLUE, HIGH);
+  } 
+  else {
+    // Tank is Full: All LEDs ON
+    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_ORANGE, HIGH);
+    digitalWrite(LED_BLUE, HIGH);
+    digitalWrite(LED_GREEN, HIGH);
+  }
+
+  // Short delay before the next reading
+  delay(100);
+}
